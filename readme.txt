@@ -1,2 +1,2 @@
 loadMasterData.m is a function that looks in its folder for the csv files that Timo has assembled and loads them all into one big table which we can then apply the HP filter to. It is tailored to the current names and structures of the files, so may have to be changed if we decide to use a different data source, but allows for easy reproducibility (i.e. you can download fresh data from the various sources, name the files appropriately and get the same results).
-main.m is where we will do the work
+main.m is where we process the data and generate plots and a table of stylised facts. We deflate nominal wages to real, take logs of quantities and apply an HP filter to separate the trend and cycle for each variable.
