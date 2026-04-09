@@ -1,6 +1,6 @@
 clearvars; close all; clc;
 
-% 1. Import Data
+% Import data
 masterData = loadMasterData();
 
 % Deflate wages to real terms using the first CPI value as the base
@@ -29,10 +29,22 @@ data_combined = [masterData, data_trend, data_cycle];
 % View the first few rows
 head(data_combined)
 
-baseVars = masterData.Properties.VariableNames;
+baseVars = masterData.Properties.VariableNames';
+numVars = length(baseVars);
+
+std_dev = zeros(numVars, 1);
+rel_std_dev = zeros(numVars, 1);
+corr_lag2 = zeros(numVars, 1);
+corr_lag1 = zeros(numVars, 1);
+corr_contemp = zeros(numVars, 1);
+corr_lead1 = zeros(numVars, 1);
+corr_lead2 = zeros(numVars, 1);
+
+y_cycle = data_combined.gdp_log_cycle;
+std_y = std(y_cycle, 'omitnan') * 100;
 
 % Loop through each base variable
-for i = 1:length(baseVars)
+for i = 1:numVars
     % Extract current variable name as a string
     varName = string(baseVars{i}); 
     
@@ -44,14 +56,44 @@ for i = 1:length(baseVars)
     figure('Name', varName);
     tiledlayout(2, 1, 'TileSpacing', 'compact'); 
     
-    % Top Plot: Trend
+    % Top plot: data and trend
     nexttile;
     plot(data_combined, [trendVar, varName], 'LineWidth', 1.5);
     title(varName + " - data & trend", 'Interpreter', 'none');
     
-    % Bottom Plot: Cycle
+    % Bottom plot: cycle
     nexttile;
     plot(data_combined, cycleVar, 'LineWidth', 1.5);
     title(varName + " - cycle", 'Interpreter', 'none');
-    yline(0, 'k--'); % Adds a dashed zero line, standard for cycle plots
+    yline(0, 'k--'); % Add a dashed zero line
+
+    % Calculate stylised facts
+    % Extract current variable cycle (x_t)
+    x_cycle = data_combined.(cycleVar);
+    
+    % Standard Deviation (scaled by 100 to represent percentages)
+    std_dev(i) = std(x_cycle, 'omitnan') * 100;
+    
+    % Relative Volatility to GDP
+    rel_std_dev(i) = std_dev(i) / std_y;
+    
+    % Cross-Correlations using Econometrics Toolbox
+    % crosscorr(x, y) computes correlation between x_t and y_{t-k}.
+    % It returns values from lag = -NumLags to +NumLags.
+    xcf = crosscorr(x_cycle, y_cycle, 'NumLags', 2);
+    
+    corr_lead2(i)   = xcf(1); % lag -2: corr(x_t, y_{t+2})
+    corr_lead1(i)   = xcf(2); % lag -1: corr(x_t, y_{t+1})
+    corr_contemp(i) = xcf(3); % lag  0: corr(x_t, y_t)
+    corr_lag1(i)    = xcf(4); % lag  1: corr(x_t, y_{t-1})
+    corr_lag2(i)    = xcf(5); % lag  2: corr(x_t, y_{t-2})
 end
+
+stylizedFacts = table(baseVars, std_dev, rel_std_dev, ...
+    corr_lag2, corr_lag1, corr_contemp, corr_lead1, corr_lead2, ...
+    'VariableNames', {'Variable', 'Std_Dev_Pct', 'Rel_Vol_to_GDP', ...
+    'Corr_x_t_y_t_minus_2', 'Corr_x_t_y_t_minus_1', 'Contemporaneous', ...
+    'Corr_x_t_y_t_plus_1', 'Corr_x_t_y_t_plus_2'});
+
+disp(stylizedFacts);
+writetable(stylizedFacts, 'stylized_facts.csv');
