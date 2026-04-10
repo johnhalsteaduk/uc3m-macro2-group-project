@@ -96,4 +96,9 @@ stylizedFacts = table(baseVars, std_dev, rel_std_dev, ...
     'Corr_x_t_y_t_plus_1', 'Corr_x_t_y_t_plus_2'});
 
 disp(stylizedFacts);
-writetable(stylizedFacts, 'stylized_facts.csv');
+
+% Create an 'output' folder if it doesn't exist
+if ~exist('output', 'dir'); mkdir('output'); end
+
+% Save the file inside that folder
+writetable(StylizedFacts, 'output/stylized_facts.csv');
