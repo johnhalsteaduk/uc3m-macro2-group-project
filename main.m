@@ -101,4 +101,4 @@ disp(stylizedFacts);
 if ~exist('output', 'dir'); mkdir('output'); end
 
 % Save the file inside that folder
-writetable(StylizedFacts, 'output/stylized_facts.csv');
+writetable(stylizedFacts, 'output/stylized_facts.csv');
