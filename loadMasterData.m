@@ -1,6 +1,6 @@
 function masterData = loadMasterData()
     % Load all .csv files in directory.
-    files = dir('*.csv'); 
+    files = dir('*.csv');
     
     % Pre-allocate cell for data. +1 because wages and hours are in one file
     % but we want to split them into two timetables.
@@ -68,8 +68,6 @@ function masterData = loadMasterData()
             disp(exception.getReport('basic'));
         end
     end
-
     masterData = synchronize(allData{:});
-    masterData = rmmissing(masterData);
     head(masterData);
 end
