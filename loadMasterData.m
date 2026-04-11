@@ -69,5 +69,4 @@ function masterData = loadMasterData()
         end
     end
     masterData = synchronize(allData{:});
-    head(masterData);
 end

@@ -7,10 +7,10 @@ masterData = loadMasterData();
 masterData.wages = (masterData.wages ./ masterData.cpi) * masterData.cpi(1);
 masterData = renamevars(masterData, 'wages', 'real_wages');
 
-% Find all variables EXCEPT the interest rate
+% Find all variables except interest rate
 varsToLog = setdiff(masterData.Properties.VariableNames, 'interest_rate');
 
-% Apply the natural log to just those columns 
+% Log those variables 
 masterData{:, varsToLog} = log(masterData{:, varsToLog});
 masterData = renamevars(masterData, varsToLog, strcat(varsToLog, '_log'));
 
@@ -34,8 +34,10 @@ data_cycle.Properties.VariableNames = strcat(masterData.Properties.VariableNames
 % Horizontally concatenate them into one large timetable
 data_combined = [masterData, data_trend, data_cycle];
 
-data_combined.nominal_rate_qtly = 0.02 + data_combined.inflation_qtly + 0.5*(data_combined.inflation_qtly - data_combined.inflation_qtly_trend) + 0.5*(data_combined.gdp_log_cycle);
-data_combined.nominal_rate_yoy = 0.02 + data_combined.inflation_yoy + 0.5*(data_combined.inflation_yoy - data_combined.inflation_yoy_trend) + 0.5*(data_combined.gdp_log_cycle);
+i = @(pi, pi_trend) 0.02 + pi + 0.5*(pi - pi_trend + data_combined.gdp_log_cycle);
+
+data_combined.nominal_rate_qtly = i(data_combined.inflation_qtly, data_combined.inflation_qtly_trend);
+data_combined.nominal_rate_yoy = i(data_combined.inflation_yoy, data_combined.inflation_yoy_trend);
 
 % View the first few rows
 head(data_combined)
@@ -54,10 +56,18 @@ corr_lead2 = zeros(numVars, 1);
 y_cycle = data_combined.gdp_log_cycle;
 std_y = std(y_cycle, 'omitnan') * 100;
 
+% Create an 'output' folder if it doesn't exist
+if ~exist('output', 'dir'); mkdir('output'); end
+
 % Loop through each base variable
 for i = 1:numVars
     % Extract current variable name as a string
     varName = string(baseVars{i}); 
+    
+    % No need to plot the inflation values
+    if contains(varName, 'inflation')
+        continue;
+    end
     
     % Construct the column names for trend and cycle
     trendVar = varName + "_trend";
@@ -83,6 +93,8 @@ for i = 1:numVars
     title(varName + " - cycle", 'Interpreter', 'none');
     yline(0, 'k--'); % Add a dashed zero line
 
+    saveas(gcf, 'output/' + varName + '.png');
+
     % Calculate stylised facts
     % Extract current variable cycle (x_t)
     x_cycle = data_combined.(cycleVar);
@@ -105,6 +117,7 @@ for i = 1:numVars
     corr_lag2(i)    = xcf(5); % lag  2: corr(x_t, y_{t-2})
 end
 
+% TODO - what do we want to see?
 stylizedFacts = table(baseVars, std_dev, rel_std_dev, ...
     corr_lag2, corr_lag1, corr_contemp, corr_lead1, corr_lead2, ...
     'VariableNames', {'Variable', 'Std_Dev_Pct', 'Rel_Vol_to_GDP', ...
@@ -112,9 +125,6 @@ stylizedFacts = table(baseVars, std_dev, rel_std_dev, ...
     'Corr_x_t_y_t_plus_1', 'Corr_x_t_y_t_plus_2'});
 
 disp(stylizedFacts);
-
-% Create an 'output' folder if it doesn't exist
-if ~exist('output', 'dir'); mkdir('output'); end
 
 % Save the file inside that folder
 writetable(stylizedFacts, 'output/stylized_facts.csv');
