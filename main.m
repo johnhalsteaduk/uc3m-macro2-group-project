@@ -35,11 +35,29 @@ data_cycle.Properties.VariableNames = strcat(masterData.Properties.VariableNames
 % Horizontally concatenate them into one large timetable
 data_combined = [masterData, data_trend, data_cycle];
 
-% Calculate interest rate according to Taylor Rule
+%% Calculate interest rate according to Taylor Rule
 i = @(data) 0.02 + data.inflation_yoy + 0.5*(data.inflation_yoy - data.inflation_yoy_trend + data.gdp_log_cycle);
 
 % data_combined.nominal_rate_qtly = i(data_combined.inflation_qtly, data_combined.inflation_qtly_trend);
 data_combined.nominal_rate_yoy = i(data_combined);
+
+%% Calculate rho parameter for TFP AR(1) process
+z = data_combined.tfp_proxy_log_cycle;
+
+% Set up current (t) and lagged (t-1) vectors
+z_t = z(2:end);
+z_lag = z(1:end-1);
+
+% Estimate AR(1) without a constant (zero-mean cycle)
+ar1_model = fitlm(z_lag, z_t, 'Intercept', false);
+
+% Extract calibration parameters
+rho = ar1_model.Coefficients.Estimate;
+rho_se = ar1_model.Coefficients.SE; 
+sigma_e = ar1_model.RMSE;
+
+fprintf('AR(1) Persistence (rho): %.4f (Standard Error: %.4f)\n', rho, rho_se);
+fprintf('Shock Volatility (sigma_e): %.4f\n', sigma_e);
 
 % View the first few rows
 head(data_combined)
@@ -48,8 +66,9 @@ head(data_combined)
 baseVars = masterData.Properties.VariableNames';
 numVars = length(baseVars);
 
-% Create an 'output' folder if it doesn't exist
-if ~exist('output', 'dir'); mkdir('output'); end
+% Create an 'output' folder with 'figures' and 'tables' subfolders if they don't exist
+if ~exist('output/figures', 'dir'); mkdir('output/figures'); end
+if ~exist('output/tables', 'dir'); mkdir('output/tables'); end
 
 % Loop through each base variable
 for i = 1:numVars
@@ -85,7 +104,7 @@ for i = 1:numVars
     title(varName + " - cycle", 'Interpreter', 'none');
     yline(0, 'k--'); % Add a dashed zero line
 
-    saveas(gcf, 'output/' + varName + '.png');
+    saveas(gcf, 'output/figures/' + varName + '.png');
 end
 
 varNames = data_cycle.Properties.VariableNames;
@@ -108,7 +127,7 @@ std_devs(scale_mask) = std_devs(scale_mask) * 100;
 %% 1. Standard Deveiation %
 std_table = array2table(std_devs, 'VariableNames', varNames, 'RowNames', {'Std_Pct'});
 disp(std_table);
-writetable(std_table, 'output/std_table.csv');
+writetable(std_table, 'output/tables/std_table.csv');
 
 %% 2. Cross-Correlation Matrix
 % Calculate contemporaneous correlation between all combinations
@@ -120,7 +139,7 @@ corr_matrix_lower(triu(true(size(corr_matrix_lower)), 1)) = NaN;
 
 corr_table = array2table(corr_matrix_lower, 'VariableNames', varNames, 'RowNames', varNames);
 disp(corr_table);
-writetable(corr_table, 'output/corr_table.csv');
+writetable(corr_table, 'output/tables/corr_table.csv');
 
 %% 3. Relative Volatility Matrix
 % Create a matrix where element (i,j) is Std(i) / Std(j)
@@ -129,4 +148,4 @@ rel_vol_matrix = std_devs' ./ std_devs;
 
 rel_vol_table = array2table(rel_vol_matrix, 'VariableNames', varNames, 'RowNames', varNames);
 disp(rel_vol_table);
-writetable(rel_vol_table, 'output/rel_vol_table.csv');
+writetable(rel_vol_table, 'output/tables/rel_vol_table.csv');
