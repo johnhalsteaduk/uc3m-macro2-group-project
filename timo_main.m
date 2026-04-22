@@ -1,38 +1,48 @@
 clearvars; close all; clc;
 
-% Import data
+%% 1. Import data
 masterData = loadMasterData();
 
-% Deflate wages to real terms using the first CPI value as the base
+%% 2. Deflate wages (real wages)
 masterData.wages = (masterData.wages ./ masterData.cpi) * masterData.cpi(1);
 masterData = renamevars(masterData, 'wages', 'real_wages');
 
-% Find all variables except interest rate
-varsToLog = setdiff(masterData.Properties.VariableNames, 'interest_rate');
+%% 3. Keep only common sample (CRUCIAL)
+masterData = rmmissing(masterData);
 
-% Log those variables 
+%% 4. Log variables (ONLY real quantities)
+varsToLog = {'gdp','consumption','investment','hours','real_wages','cpi'};
+
 masterData{:, varsToLog} = log(masterData{:, varsToLog});
 masterData = renamevars(masterData, varsToLog, strcat(varsToLog, '_log'));
 
-% Calculate log(tfp_proxy)
+%% 5. Construct TFP proxy (log form)
 masterData.tfp_proxy_log = masterData.gdp_log - masterData.hours_log;
 
-% Calculate year-on-year inflation
-% We decided not to use quarterly but it's left here for now
-% masterData.inflation_qtly = [NaN; 400 * diff(masterData.cpi_log)];
-masterData.inflation_yoy  = [NaN(4, 1); 100 * (masterData.cpi_log(5:end) - masterData.cpi_log(1:end-4))];
+%% 6. Inflation (YoY, NOT HP filtered)
+masterData.inflation_yoy = [NaN(4,1); ...
+    100 * (masterData.cpi_log(5:end) - masterData.cpi_log(1:end-4))];
 
-% Delete rows with null values. Done here so that lagged cpi data was
-% available to calculate inflation before
+%% 7. Drop NaNs after constructing variables
 masterData = rmmissing(masterData);
 
-[data_trend, data_cycle] = hpfilter(masterData, 'Smoothing', 1600);
+%% 8. Select variables for HP filter (ONLY real quantities)
+vars_hp = {'gdp_log','consumption_log','investment_log', ...
+           'hours_log','real_wages_log','tfp_proxy_log'};
 
-% Rename the variables so they don't clash when combined
-data_trend.Properties.VariableNames = strcat(masterData.Properties.VariableNames, '_trend');
-data_cycle.Properties.VariableNames = strcat(masterData.Properties.VariableNames, '_cycle');
+data_hp = masterData(:, vars_hp);
 
-% Horizontally concatenate them into one large timetable
+%% 9. Apply HP filter (lambda = 1600 for quarterly)
+[data_trend, data_cycle] = hpfilter(data_hp, 'Smoothing', 1600);
+
+%% 10. Rename variables (clean naming)
+data_cycle.Properties.VariableNames = strcat(vars_hp, '_cycle');
+
+%% 11. Add NON-filtered variables
+data_cycle.inflation_yoy_cycle = masterData.inflation_yoy;
+data_cycle.interest_rate_cycle = masterData.interest_rate;
+
+%% 12. FINAL DATASET (ready for moments)
 data_combined = [masterData, data_trend, data_cycle];
 
 %% Calculate interest rate according to Taylor Rule
@@ -42,12 +52,10 @@ i = @(data) 0.02 + data.inflation_yoy + 0.5*(data.inflation_yoy - data.inflation
 data_combined.nominal_rate_yoy = i(data_combined);
 
 %% Calculate omega_std parameters for calibration
-tfp_L1 = data_combined.tfp_proxy_log(1:end-1); % tfp_{t-1} (first lag)
-tfp_L0 = data_combined.tfp_proxy_log(2:end); % tfp_t
-ar1_model = fitlm(tfp_L1, tfp_L0);
+ar1_model = fitlm(data_combined.tfp_proxy_log(1:end-1), data_combined.tfp_proxy_log(2:end), 'Intercept', false);
 
-rho = ar1_model.Coefficients.Estimate(2) % Get the slope
-rho_se = ar1_model.Coefficients.SE(2) % Slope standard error
+rho = ar1_model.Coefficients.Estimate
+rho_se = ar1_model.Coefficients.SE
 tfp_shock_std = ar1_model.RMSE
 
 omega = data_combined.interest_rate - data_combined.nominal_rate_yoy;

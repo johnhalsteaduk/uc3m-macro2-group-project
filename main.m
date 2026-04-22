@@ -41,23 +41,22 @@ i = @(data) 0.02 + data.inflation_yoy + 0.5*(data.inflation_yoy - data.inflation
 % data_combined.nominal_rate_qtly = i(data_combined.inflation_qtly, data_combined.inflation_qtly_trend);
 data_combined.nominal_rate_yoy = i(data_combined);
 
-%% Calculate rho parameter for TFP AR(1) process
-z = data_combined.tfp_proxy_log_cycle;
+%% Calculate omega_std parameters for calibration
+tfp_L0 = data_combined.tfp_proxy_log(2:end); % tfp_t
+tfp_L1 = data_combined.tfp_proxy_log(1:end-1); % tfp_{t-1} (first lag)
+ar1_model = fitlm(tfp_L1, tfp_L0); % Regress tfp on its first lag
 
-% Set up current (t) and lagged (t-1) vectors
-z_t = z(2:end);
-z_lag = z(1:end-1);
+rho = ar1_model.Coefficients.Estimate(2); % Get the slope
+rho_se = ar1_model.Coefficients.SE(2); % Slope standard error
 
-% Estimate AR(1) without a constant (zero-mean cycle)
-ar1_model = fitlm(z_lag, z_t, 'Intercept', false);
+omega = data_combined.interest_rate - data_combined.nominal_rate_yoy;
+std_omega = std(omega);
 
-% Extract calibration parameters
-rho = ar1_model.Coefficients.Estimate;
-rho_se = ar1_model.Coefficients.SE; 
-sigma_e = ar1_model.RMSE;
+% Create an 'output' folder with 'figures' and 'tables' subfolders if they don't exist
+if ~exist('output/figures', 'dir'); mkdir('output/figures'); end
+if ~exist('output/tables', 'dir'); mkdir('output/tables'); end
 
-fprintf('AR(1) Persistence (rho): %.4f (Standard Error: %.4f)\n', rho, rho_se);
-fprintf('Shock Volatility (sigma_e): %.4f\n', sigma_e);
+writetable(table(rho, rho_se, std_omega), 'output/tables/nkm_params_table.csv');
 
 % View the first few rows
 head(data_combined)
@@ -66,46 +65,42 @@ head(data_combined)
 baseVars = masterData.Properties.VariableNames';
 numVars = length(baseVars);
 
-% Create an 'output' folder with 'figures' and 'tables' subfolders if they don't exist
-if ~exist('output/figures', 'dir'); mkdir('output/figures'); end
-if ~exist('output/tables', 'dir'); mkdir('output/tables'); end
-
-% Loop through each base variable
-for i = 1:numVars
-    % Extract current variable name as a string
-    varName = string(baseVars{i}); 
-
-    % No need to plot the inflation values
-    if contains(varName, 'inflation')
-        continue;
-    end
-
-    % Construct the column names for trend and cycle
-    trendVar = varName + "_trend";
-    cycleVar = varName + "_cycle";
-
-    % Create a new figure with a 2-row, 1-column layout
-    figure('Name', varName);
-    tiledlayout(2, 1, 'TileSpacing', 'compact'); 
-
-    % Top plot: data and trend
-    nexttile;
-    if strcmp(varName,'interest_rate')
-        plot(data_combined, [trendVar, varName, 'nominal_rate_yoy'], 'LineWidth', 1.5);
-        legend('Trend', 'Original Data', 'Implied Taylor Rate (year-on-year)', 'Location', 'best');
-    else
-        plot(data_combined, [trendVar, varName], 'LineWidth', 1.5);
-    end
-    title(varName + " - data & trend", 'Interpreter', 'none');
-
-    % Bottom plot: cycle
-    nexttile;
-    plot(data_combined, cycleVar, 'LineWidth', 1.5);
-    title(varName + " - cycle", 'Interpreter', 'none');
-    yline(0, 'k--'); % Add a dashed zero line
-
-    saveas(gcf, 'output/figures/' + varName + '.png');
-end
+% % Loop through each base variable
+% for i = 1:numVars
+%     % Extract current variable name as a string
+%     varName = string(baseVars{i}); 
+% 
+%     % No need to plot the inflation values
+%     if contains(varName, 'inflation')
+%         continue;
+%     end
+% 
+%     % Construct the column names for trend and cycle
+%     trendVar = varName + "_trend";
+%     cycleVar = varName + "_cycle";
+% 
+%     % Create a new figure with a 2-row, 1-column layout
+%     figure('Name', varName);
+%     tiledlayout(2, 1, 'TileSpacing', 'compact'); 
+% 
+%     % Top plot: data and trend
+%     nexttile;
+%     if strcmp(varName,'interest_rate')
+%         plot(data_combined, [trendVar, varName, 'nominal_rate_yoy'], 'LineWidth', 1.5);
+%         legend('Trend', 'Original Data', 'Implied Taylor Rate (year-on-year)', 'Location', 'best');
+%     else
+%         plot(data_combined, [trendVar, varName], 'LineWidth', 1.5);
+%     end
+%     title(varName + " - data & trend", 'Interpreter', 'none');
+% 
+%     % Bottom plot: cycle
+%     nexttile;
+%     plot(data_combined, cycleVar, 'LineWidth', 1.5);
+%     title(varName + " - cycle", 'Interpreter', 'none');
+%     yline(0, 'k--'); % Add a dashed zero line
+% 
+%     saveas(gcf, 'output/figures/' + varName + '.png');
+% end
 
 varNames = data_cycle.Properties.VariableNames;
 
