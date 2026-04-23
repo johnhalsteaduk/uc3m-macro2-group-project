@@ -65,42 +65,42 @@ head(data_combined)
 baseVars = masterData.Properties.VariableNames';
 numVars = length(baseVars);
 
-% % Loop through each base variable
-% for i = 1:numVars
-%     % Extract current variable name as a string
-%     varName = string(baseVars{i}); 
-% 
-%     % No need to plot the inflation values
-%     if contains(varName, 'inflation')
-%         continue;
-%     end
-% 
-%     % Construct the column names for trend and cycle
-%     trendVar = varName + "_trend";
-%     cycleVar = varName + "_cycle";
-% 
-%     % Create a new figure with a 2-row, 1-column layout
-%     figure('Name', varName);
-%     tiledlayout(2, 1, 'TileSpacing', 'compact'); 
-% 
-%     % Top plot: data and trend
-%     nexttile;
-%     if strcmp(varName,'interest_rate')
-%         plot(data_combined, [trendVar, varName, 'nominal_rate_yoy'], 'LineWidth', 1.5);
-%         legend('Trend', 'Original Data', 'Implied Taylor Rate (year-on-year)', 'Location', 'best');
-%     else
-%         plot(data_combined, [trendVar, varName], 'LineWidth', 1.5);
-%     end
-%     title(varName + " - data & trend", 'Interpreter', 'none');
-% 
-%     % Bottom plot: cycle
-%     nexttile;
-%     plot(data_combined, cycleVar, 'LineWidth', 1.5);
-%     title(varName + " - cycle", 'Interpreter', 'none');
-%     yline(0, 'k--'); % Add a dashed zero line
-% 
-%     saveas(gcf, 'output/figures/' + varName + '.png');
-% end
+% Loop through each base variable
+for i = 1:numVars
+    % Extract current variable name as a string
+    varName = string(baseVars{i}); 
+
+    % No need to plot the inflation values
+    if contains(varName, 'inflation')
+        continue;
+    end
+
+    % Construct the column names for trend and cycle
+    trendVar = varName + "_trend";
+    cycleVar = varName + "_cycle";
+
+    % Create a new figure with a 2-row, 1-column layout
+    figure('Name', varName);
+    tiledlayout(2, 1, 'TileSpacing', 'compact'); 
+
+    % Top plot: data and trend
+    nexttile;
+    if strcmp(varName,'interest_rate')
+        plot(data_combined, [trendVar, varName, 'nominal_rate_yoy'], 'LineWidth', 1.5);
+        legend('Trend', 'Original Data', 'Implied Taylor Rate (year-on-year)', 'Location', 'best');
+    else
+        plot(data_combined, [trendVar, varName], 'LineWidth', 1.5);
+    end
+    title(varName + " - data & trend", 'Interpreter', 'none');
+
+    % Bottom plot: cycle
+    nexttile;
+    plot(data_combined, cycleVar, 'LineWidth', 1.5);
+    title(varName + " - cycle", 'Interpreter', 'none');
+    yline(0, 'k--'); % Add a dashed zero line
+
+    saveas(gcf, 'output/figures/' + varName + '.png');
+end
 
 varNames = data_cycle.Properties.VariableNames;
 
