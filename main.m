@@ -18,12 +18,10 @@ masterData = renamevars(masterData, varsToLog, strcat(varsToLog, '_log'));
 masterData.tfp_proxy_log = masterData.gdp_log - masterData.hours_log;
 
 % Calculate year-on-year inflation
-% We decided not to use quarterly but it's left here for now
-% masterData.inflation_qtly = [NaN; 400 * diff(masterData.cpi_log)];
 masterData.inflation_yoy  = [NaN(4, 1); 100 * (masterData.cpi_log(5:end) - masterData.cpi_log(1:end-4))];
 
 % Delete rows with null values. Done here so that lagged cpi data was
-% available to calculate inflation before
+% available to calculate inflation beforehand
 masterData = rmmissing(masterData);
 
 [data_trend, data_cycle] = hpfilter(masterData, 'Smoothing', 1600);
@@ -32,16 +30,15 @@ masterData = rmmissing(masterData);
 data_trend.Properties.VariableNames = strcat(masterData.Properties.VariableNames, '_trend');
 data_cycle.Properties.VariableNames = strcat(masterData.Properties.VariableNames, '_cycle');
 
-% Horizontally concatenate them into one large timetable
+% Concatenate them into one timetable
 data_combined = [masterData, data_trend, data_cycle];
 
 %% Calculate interest rate according to Taylor Rule
 i = @(data) 0.02 + data.inflation_yoy + 0.5*(data.inflation_yoy - data.inflation_yoy_trend + data.gdp_log_cycle);
 
-% data_combined.nominal_rate_qtly = i(data_combined.inflation_qtly, data_combined.inflation_qtly_trend);
 data_combined.nominal_rate_yoy = i(data_combined);
 
-%% Calculate omega_std parameters for calibration
+%% Calculate parameters for NKM calibration
 tfp_L0 = data_combined.tfp_proxy_log(2:end); % tfp_t
 tfp_L1 = data_combined.tfp_proxy_log(1:end-1); % tfp_{t-1} (first lag)
 ar1_model = fitlm(tfp_L1, tfp_L0); % Regress tfp on its first lag
@@ -49,7 +46,7 @@ ar1_model = fitlm(tfp_L1, tfp_L0); % Regress tfp on its first lag
 rho = ar1_model.Coefficients.Estimate(2); % Get the slope
 rho_se = ar1_model.Coefficients.SE(2); % Slope standard error
 
-omega = data_combined.interest_rate - data_combined.nominal_rate_yoy;
+omega = data_combined.interest_rate - data_combined.nominal_rate_yoy; % Interest rate shock
 std_omega = std(omega);
 
 % Create an 'output' folder with 'figures' and 'tables' subfolders if they don't exist
@@ -63,17 +60,22 @@ head(data_combined)
 
 % Get the base variables (no trend or cycle) and count them
 baseVars = masterData.Properties.VariableNames';
-numVars = length(baseVars);
 
 % Loop through each base variable
-for i = 1:numVars
+for i = 1:length(baseVars)
     % Extract current variable name as a string
-    varName = string(baseVars{i}); 
+    varName = string(baseVars{i});
 
-    % No need to plot the inflation values
     if contains(varName, 'inflation')
         continue;
     end
+
+    cleanName = strrep(varName, '_log', '');
+    cleanName = strrep(cleanName, '_', ' ');
+    cleanName = regexprep(cleanName, '(\<\w)', '${upper($1)}');
+    cleanName = regexprep(cleanName, 'gdp', 'GDP', 'ignorecase');
+    cleanName = regexprep(cleanName, 'cpi', 'CPI', 'ignorecase');
+    cleanName = regexprep(cleanName, 'tfp', 'TFP', 'ignorecase');
 
     % Construct the column names for trend and cycle
     trendVar = varName + "_trend";
@@ -87,17 +89,27 @@ for i = 1:numVars
     nexttile;
     if strcmp(varName,'interest_rate')
         plot(data_combined, [trendVar, varName, 'nominal_rate_yoy'], 'LineWidth', 1.5);
-        legend('Trend', 'Original Data', 'Implied Taylor Rate (year-on-year)', 'Location', 'best');
+        legend('Trend', 'Realised', 'Predicted (Taylor Rule)', 'Location', 'best');
+        title(cleanName + " - Trend, Data & Taylor Rule Prediction");
+        yTop = "Percent (%)";
+        yBottom = "Deviation (pp)";
     else
         plot(data_combined, [trendVar, varName], 'LineWidth', 1.5);
+        title(cleanName + " - Trend & Data");
+        yTop = "Log Level";
+        yBottom = "Fractional Deviation";
     end
-    title(varName + " - data & trend", 'Interpreter', 'none');
+
+    ylabel(yTop);
+    xlabel("");
 
     % Bottom plot: cycle
     nexttile;
     plot(data_combined, cycleVar, 'LineWidth', 1.5);
-    title(varName + " - cycle", 'Interpreter', 'none');
+    title(cleanName + " - Cycle");
     yline(0, 'k--'); % Add a dashed zero line
+    ylabel(yBottom);
+    xlabel("Date")
 
     saveas(gcf, 'output/figures/' + varName + '.png');
 end
